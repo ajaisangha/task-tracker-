@@ -279,3 +279,16 @@ table td {
   margin-top: 0.3rem;
   font-size: 0.9rem;
 }
+
+/* Force input to stay white even in browser-forced dark mode */
+@media (prefers-color-scheme: dark) {
+  input {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: #cccccc !important;
+  }
+
+  input::placeholder {
+    color: #444444 !important;
+  }
+}
