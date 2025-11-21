@@ -41,6 +41,8 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLive, setShowLive] = useState(false);
   const [tick, setTick] = useState(0);
+  const [showClearDialog, setShowClearDialog] = useState(false);
+
 
   const isCentered = !employeeId && !isAdmin;
 
@@ -109,22 +111,85 @@ function App() {
     return `${h}:${m}:${s}`;
   };
 
-  const exportCSV = (rows) => {
-    if (rows.length === 0) return;
-    const enriched = rows.map(r => ({ ...r, duration: getDuration(r) }));
-    const headers = Object.keys(enriched[0]).join(",");
-    const body = enriched.map(r =>
-      Object.values(r).map(v => `"${v}"`).join(",")
-    );
-    const csv = [headers, ...body].join("\n");
+const exportCSV = (rows) => {
+  if (rows.length === 0) return;
 
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "task-report.csv";
-    a.click();
-  };
+  // Add duration to each row
+  const enriched = rows.map(r => ({
+    ...r,
+    duration: getDuration(r)
+  }));
+
+  // ---- GROUP BY EMPLOYEE ----
+  const grouped = {};
+  enriched.forEach((row) => {
+    if (!grouped[row.employeeId]) grouped[row.employeeId] = [];
+    grouped[row.employeeId].push(row);
+  });
+
+  // Sort employee names
+  const employees = Object.keys(grouped).sort();
+
+  let csv = "";
+
+  employees.forEach(emp => {
+    csv += `Employee: ${emp}\n`;
+
+    const userRows = grouped[emp].sort(
+      (a, b) => new Date(a.startTime) - new Date(b.startTime)
+    );
+
+    const headers = Object.keys(userRows[0]).join(",");
+    csv += headers + "\n";
+
+    userRows.forEach(r => {
+      csv += Object.values(r)
+        .map(v => `"${v}"`)
+        .join(",") + "\n";
+    });
+
+    csv += "\n"; // spacing between users
+  });
+
+  // Download the CSV file
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "task-report.csv";
+  a.click();
+};
+
+const ClearDataDialog = () => (
+  <div className="dialog-overlay">
+    <div className="dialog-box">
+      <h3>Clear All Data?</h3>
+      <p>This action will remove all task logs and cannot be undone.</p>
+
+      <div className="dialog-buttons">
+        <button
+          className="confirm-clear"
+          onClick={() => {
+            setTaskLogs([]);
+            setCurrentTasks({});
+            setShowClearDialog(false);
+          }}
+        >
+          Clear
+        </button>
+
+        <button
+          className="cancel-clear"
+          onClick={() => setShowClearDialog(false)}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 
   return (
     <div id="root">
@@ -158,6 +223,13 @@ function App() {
               }
             >
               Download CSV
+            </button>
+
+            <button
+              className="clear-data"
+              onClick={() => setShowClearDialog(true)}
+            >
+              Clear Data
             </button>
 
             <button className="exit-admin" onClick={exitAdminMode}>
@@ -216,7 +288,7 @@ function App() {
           ))}
         </div>
       )}
-
+      {showClearDialog && <ClearDataDialog />}
     </div>
   );
 }
