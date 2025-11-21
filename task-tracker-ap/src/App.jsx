@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import { collection, addDoc } from "firebase/firestore";
+import "./App.css";
 
 const ADMIN_IDS = ["ajaypal.sangha", "abin.thomas"];
 
@@ -20,24 +21,16 @@ const DEPARTMENTS = {
   Pick: ["Ambient picking", "ambient pick cleanup", "chill picking", "chill pick cleanup"],
   Bagging: ["bagging", "bagging runner", "bagging cleanup"],
   Decant: [
-    "MHE",
-    "ambient decant",
-    "ambient decant cleanup",
-    "Pallet cleanup",
-    "Baler task",
-    "chill decant",
-    "chill decant cleanup"
+    "MHE", "ambient decant", "ambient decant cleanup", "Pallet cleanup",
+    "Baler task", "chill decant", "chill decant cleanup"
   ],
-  Freezer: ["freezer decant", "freezer putaway", "freezer pick", "freezer cleanup", "unload and icing trolly"],
+  Freezer: [
+    "freezer decant", "freezer putaway", "freezer pick",
+    "freezer cleanup", "unload and icing trolly"
+  ],
   Dispatch: [
-    "frameload",
-    "MHE",
-    "dekit",
-    "van loading",
-    "dispatch cleanup",
-    "van dekit",
-    "trailer dekit",
-    "trailer loading"
+    "frameload", "MHE", "dekit", "van loading",
+    "dispatch cleanup", "van dekit", "trailer dekit", "trailer loading"
   ]
 };
 
@@ -47,22 +40,20 @@ function App() {
   const [taskLogs, setTaskLogs] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLive, setShowLive] = useState(false);
+  const [tick, setTick] = useState(0);
 
-  const [tick, setTick] = useState(0); // updates durations every second
+  const isCentered = !employeeId && !isAdmin;
 
-  // Timer to refresh duration every second
+  // Timer to refresh live duration
   useEffect(() => {
     const interval = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Detect admin ONLY after scanning ID
+  // Detect admin after scan
   useEffect(() => {
     if (employeeId.trim() === "") return;
-    if (ADMIN_IDS.includes(employeeId)) {
-      setIsAdmin(true);
-      setShowLive(false);
-    }
+    setIsAdmin(ADMIN_IDS.includes(employeeId));
   }, [employeeId]);
 
   const exitAdminMode = () => {
@@ -74,9 +65,10 @@ function App() {
   const handleTaskChange = async (task, department) => {
     const now = new Date();
 
-    // If employee has previous unfinished task → finish it
+    // Close previous task if active
     if (currentTasks[employeeId]) {
       const old = currentTasks[employeeId];
+
       const completed = {
         employeeId,
         task: old.task,
@@ -99,10 +91,9 @@ function App() {
     };
 
     setCurrentTasks(prev => ({ ...prev, [employeeId]: newTask }));
-
     await addDoc(collection(db, "taskLogs"), newTask);
 
-    // Reset screen
+    // Reset user back to scan
     setEmployeeId("");
     setIsAdmin(false);
     setShowLive(false);
@@ -111,41 +102,24 @@ function App() {
   const getDuration = (task) => {
     const start = new Date(task.startTime);
     const end = task.endTime ? new Date(task.endTime) : new Date();
-
     const diff = Math.floor((end - start) / 1000);
-
-    const h = Math.floor(diff / 3600).toString().padStart(2, "0");
-    const m = Math.floor((diff % 3600) / 60).toString().padStart(2, "0");
-    const s = Math.floor(diff % 60).toString().padStart(2, "0");
-
+    const h = String(Math.floor(diff / 3600)).padStart(2, "0");
+    const m = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
+    const s = String(diff % 60).padStart(2, "0");
     return `${h}:${m}:${s}`;
   };
 
   const exportCSV = (rows) => {
     if (rows.length === 0) return;
-
-    const enriched = rows.map(r => {
-      const start = new Date(r.startTime);
-      const end = r.endTime ? new Date(r.endTime) : new Date();
-      const diff = Math.floor((end - start) / 1000);
-
-      return {
-        ...r,
-        duration: getDuration(r)
-      };
-    });
-
+    const enriched = rows.map(r => ({ ...r, duration: getDuration(r) }));
     const headers = Object.keys(enriched[0]).join(",");
     const body = enriched.map(r =>
-      Object.values(r)
-        .map(v => `"${v}"`)
-        .join(",")
+      Object.values(r).map(v => `"${v}"`).join(",")
     );
-
     const csv = [headers, ...body].join("\n");
+
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
-
     const a = document.createElement("a");
     a.href = url;
     a.download = "task-report.csv";
@@ -153,50 +127,51 @@ function App() {
   };
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Task Tracker</h1>
+    <div id="root">
+      
+      {/* ------------------ TITLE & INPUT AREA ------------------ */}
+      <div className={isCentered ? "center-screen" : "top-screen"}>
+        <h1>Task Tracker</h1>
 
-      {/* ================== SCAN INPUT ================== */}
-      {!isAdmin && (
-        <input
-          placeholder="Scan Employee ID"
-          value={employeeId}
-          onChange={e => setEmployeeId(e.target.value.toLowerCase())}
-          autoFocus
-        />
-      )}
+        {!isAdmin && (
+          <input
+            placeholder="Scan Employee ID"
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value.toLowerCase())}
+            autoFocus
+          />
+        )}
+      </div>
 
-      {/* ================== ADMIN MODE ================== */}
+      {/* ------------------ ADMIN MODE ------------------ */}
       {isAdmin && (
-        <div style={{ marginTop: 20 }}>
+        <div style={{ textAlign: "center" }}>
           <h2>ADMIN MODE ({employeeId})</h2>
+          <div className="admin-buttons">
+            <button onClick={() => setShowLive(v => !v)}>
+              {showLive ? "Hide Live View" : "View Live"}
+            </button>
 
-          <button onClick={() => setShowLive(v => !v)}>
-            {showLive ? "Hide Live View" : "View Live"}
-          </button>
+            <button
+              onClick={() =>
+                exportCSV([...taskLogs, ...Object.values(currentTasks)])
+              }
+            >
+              Download CSV
+            </button>
 
-          <button
-            onClick={() => exportCSV([...taskLogs, ...Object.values(currentTasks)])}
-            style={{ marginLeft: 10 }}
-          >
-            Download CSV
-          </button>
+            <button className="exit-admin" onClick={exitAdminMode}>
+              Exit Admin Mode
+            </button>
+          </div>
 
-          <button
-            onClick={exitAdminMode}
-            style={{ marginLeft: 10, background: "red", color: "white" }}
-          >
-            Exit Admin Mode
-          </button>
         </div>
       )}
 
-      {/* ================== LIVE VIEW ================== */}
+      {/* ------------------ LIVE VIEW ------------------ */}
       {isAdmin && showLive && (
-        <div style={{ marginTop: 20 }}>
-          <h3>Live Tasks</h3>
-
-          <table border="1" cellPadding="6">
+        <div className="live-container">
+          <table>
             <thead>
               <tr>
                 <th>Employee</th>
@@ -221,25 +196,27 @@ function App() {
         </div>
       )}
 
-      {/* ================== EMPLOYEE TASK SELECTION ================== */}
+      {/* ------------------ EMPLOYEE TASK BUTTONS ------------------ */}
       {!isAdmin && employeeId && (
-        <div style={{ marginTop: 20 }}>
+        <div className="task-grid">
           {DEPARTMENT_ORDER.map(dep => (
-            <div key={dep} style={{ marginBottom: 20 }}>
+            <div className="task-group" key={dep}>
               <h3>{dep}</h3>
-              {DEPARTMENTS[dep].map(task => (
-                <button
-                  key={task}
-                  onClick={() => handleTaskChange(task, dep)}
-                  style={{ margin: 5 }}
-                >
-                  {task}
-                </button>
-              ))}
+              <div className="task-buttons">
+                {DEPARTMENTS[dep].map(task => (
+                  <button
+                    key={task}
+                    onClick={() => handleTaskChange(task, dep)}
+                  >
+                    {task}
+                  </button>
+                ))}
+              </div>
             </div>
           ))}
         </div>
       )}
+
     </div>
   );
 }

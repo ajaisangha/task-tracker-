@@ -1,42 +1,206 @@
+/* ----------------------------------
+   VOILA COLOR VARIABLES
+---------------------------------- */
+:root {
+  --title-color: #4A7EFF;
+  --button-color: #2F2F2F;
+  --button-text: #FFFFFF;
+  --heading-color: #6E3BFF;
+  --text-color: #000000;
+  --border-color: #E0E0E0;
+  --bg: #FFFFFF;
+}
+
+/* ----------------------------------
+   GLOBAL
+---------------------------------- */
+body {
+  background-color: var(--bg);
+  color: var(--text-color);
+  font-family: "Segoe UI", "Roboto", sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* ----------------------------------
+   TITLE + INPUT POSITIONING
+---------------------------------- */
+
+/* BEFORE scan → center vertically */
+.center-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* vertical center */
+  align-items: center;
+  transition: 0.3s ease;
+}
+
+/* AFTER scan → stick to top center */
+.top-screen {
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ----------------------------------
+   TITLE
+---------------------------------- */
+h1 {
+  color: var(--title-color);
+  font-size: clamp(1.6rem, 3vw, 2.4rem);
+  margin: 0.5rem 0;
+}
+
+/* Dept headings */
+h3 {
+  color: var(--heading-color);
+  margin: 0.3rem 0 0.4rem 0;
+  font-size: clamp(1rem, 2vw, 1.4rem);
+}
+
+/* ----------------------------------
+   INPUT FIELD
+---------------------------------- */
+input {
+  padding: 0.6em;
+  font-size: clamp(1rem, 2.5vw, 1.2rem);
+  border: 2px solid var(--border-color);
+  border-radius: 6px;
+  width: 260px;
+  outline: none;
+  transition: 200ms;
+  color: var(--text-color);
+}
+
+input:focus {
+  border-color: var(--title-color);
+}
+
+/* ----------------------------------
+   BUTTONS
+---------------------------------- */
+button {
+  background-color: var(--title-color);   /* Voila Blue Buttons */
+  color: var(--button-text);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: clamp(0.8rem, 2vw, 1rem);
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: 150ms;
+}
+
+button.exit-admin {
+  background-color: #FFB45C;
+  color: black;
+}
+
+button.exit-admin:hover {
+  background-color: #FFD08A;
+}
+
+.admin-buttons {
+  display: flex;
+  gap: 0.7rem;        /* adds space between admin buttons */
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+}
+
+/* ----------------------------------
+   TASK GRID FIXED
+---------------------------------- */
+.task-grid {
+  flex: 1;
+  width: 100%;
+  overflow: auto;
+
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;     /* center ALL groups */
+  gap: 1rem;
+  padding: 0.5rem;
+
+  align-content: flex-start;    /* groups stay from top */
+}
+
+/* task group box */
+.task-group {
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.8rem;
+  
+  width: 260px;                  /* uniform card width */
+  display: flex;
+  flex-direction: column;
+  align-items: center;           /* center heading + buttons */
+  text-align: center;            /* center heading text */
+}
+
+/* button group inside each card */
+.task-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+/* ensure buttons don’t merge */
+.task-buttons button {
+  flex: 1 1 auto;
+  max-width: 100%;
+  white-space: normal;         /* allow wrapping */
+  word-break: break-word;      /* break long words */
   text-align: center;
+  padding: 0.6rem 0.4rem;      /* slim but readable */
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
-}
-
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
+/* desktop: multiple buttons inline */
+@media (min-width: 900px) {
+  .task-buttons button {
+    flex: 1 1 auto;
+    max-width: none;
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+/* ----------------------------------
+   LIVE VIEW TABLE
+---------------------------------- */
+.live-container {
+  width: 95%;
+  max-height: 65vh;
+  overflow-y: auto;
+  margin-top: 1rem;
 }
 
-.card {
-  padding: 2em;
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: clamp(0.7rem, 1.5vw, 1rem);
 }
 
-.read-the-docs {
-  color: #888;
+table th {
+  background-color: var(--title-color);
+  color: white;
+  padding: 0.4rem;
+  border: 1px solid var(--border-color);   /* FIX */
+}
+
+table td {
+  border: 1px solid var(--border-color);
+  padding: 0.4rem;
 }
