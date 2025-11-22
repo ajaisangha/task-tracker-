@@ -6,6 +6,10 @@ import {
   getDocs,
   deleteDoc,
   doc,
+  setDoc,
+  onSnapshot,
+  query,
+  orderBy
 } from "firebase/firestore";
 import "./App.css";
 
@@ -54,10 +58,13 @@ const DEPARTMENTS = {
   ],
 };
 
+// FIXED CSV HEADER ORDER (your required format)
+const CSV_HEADERS = ["task", "department", "startTime", "endTime", "duration"];
+
 function App() {
   const [employeeId, setEmployeeId] = useState("");
-  const [currentTasks, setCurrentTasks] = useState({});
-  const [taskLogs, setTaskLogs] = useState([]);
+  const [currentTasks, setCurrentTasks] = useState({}); // activeTasks from Firestore
+  const [taskLogs, setTaskLogs] = useState([]);         // completed logs from Firestore
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLive, setShowLive] = useState(false);
   const [tick, setTick] = useState(0);
@@ -67,52 +74,53 @@ function App() {
   const isCentered = !employeeId && !isAdmin;
 
   /* ------------------------------------
-     FIRESTORE WRITE
-  ------------------------------------ */
-  const saveTaskToFirestore = async (task) => {
-    try {
-      await addDoc(collection(db, "taskLogs"), task);
-      console.log("Saved to Firestore:", task);
-    } catch (error) {
-      console.error("🔥 Firestore Save Error:", error);
-    }
-  };
-
-  /* ------------------------------------
-     FIRESTORE CLEAR
-  ------------------------------------ */
-  const clearFirestoreData = async () => {
-    try {
-      const snap = await getDocs(collection(db, "taskLogs"));
-      const deletions = snap.docs.map((d) =>
-        deleteDoc(doc(db, "taskLogs", d.id))
-      );
-      await Promise.all(deletions);
-      console.log("🔥 All Firestore logs cleared");
-    } catch (err) {
-      console.error("🔥 Error clearing Firestore:", err);
-    }
-  };
-
-  /* ------------------------------------
-     TICK FOR LIVE DURATIONS
+     DURATION TIMER (live view refresh)
   ------------------------------------ */
   useEffect(() => {
-    const interval = setInterval(() => setTick((t) => t + 1), 1000);
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  /* ------------------------------------
+     SUBSCRIBE TO ACTIVE TASKS (LIVE VIEW)
+     Persists across refresh
+  ------------------------------------ */
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "activeTasks"), (snap) => {
+      const activeMap = {};
+      snap.forEach(d => {
+        activeMap[d.id] = d.data();
+      });
+      setCurrentTasks(activeMap);
+    });
+
+    return () => unsub();
+  }, []);
+
+  /* ------------------------------------
+     LOAD COMPLETED LOGS ON START
+  ------------------------------------ */
+  useEffect(() => {
+    const loadLogs = async () => {
+      try {
+        const q = query(collection(db, "taskLogs"), orderBy("startTime", "asc"));
+        const snap = await getDocs(q);
+        setTaskLogs(snap.docs.map(d => d.data()));
+      } catch (err) {
+        console.error("🔥 Load taskLogs error:", err);
+      }
+    };
+    loadLogs();
   }, []);
 
   /* ------------------------------------
      ADMIN DETECT
   ------------------------------------ */
   useEffect(() => {
-    if (employeeId.trim() === "") return;
+    if (!employeeId.trim()) return;
     setIsAdmin(ADMIN_IDS.includes(employeeId.trim()));
   }, [employeeId]);
 
-  /* ------------------------------------
-     EXIT ADMIN
-  ------------------------------------ */
   const exitAdminMode = () => {
     setIsAdmin(false);
     setEmployeeId("");
@@ -120,51 +128,77 @@ function App() {
   };
 
   /* ------------------------------------
-     HANDLE TASK CHANGE + SHIFT END FIX
+     SAFE SCHEMA GUARD (prevents bad docs)
+  ------------------------------------ */
+  const isValidCompletedRow = (row) => {
+    return (
+      row &&
+      typeof row.employeeId === "string" &&
+      typeof row.task === "string" &&
+      typeof row.department === "string" &&
+      typeof row.startTime === "string" &&
+      typeof row.endTime === "string"
+    );
+  };
+
+  /* ------------------------------------
+     SAVE COMPLETED TASK
+  ------------------------------------ */
+  const saveCompletedTask = async (task) => {
+    if (!isValidCompletedRow(task)) {
+      console.error("🔥 Blocked invalid row:", task);
+      return;
+    }
+    try {
+      await addDoc(collection(db, "taskLogs"), task);
+      setTaskLogs(prev => [...prev, task]);
+    } catch (err) {
+      console.error("🔥 Firestore write error:", err);
+    }
+  };
+
+  /* ------------------------------------
+     HANDLE TASK CHANGE
+     - close old task -> taskLogs
+     - new active task -> activeTasks doc
+     - shift end -> close old + add shift end + delete active doc
   ------------------------------------ */
   const handleTaskChange = async (task, department) => {
-    const now = new Date();
+    const nowISO = new Date().toISOString();
+    const id = employeeId.trim();
 
-    // Close previous task if active
-    if (currentTasks[employeeId]) {
-      const old = currentTasks[employeeId];
+    // CLOSE previous active task if exists
+    if (currentTasks[id]) {
+      const old = currentTasks[id];
 
       const completed = {
-        employeeId,
+        employeeId: id,
         task: old.task,
         department: old.department,
         startTime: old.startTime,
-        endTime: now.toISOString(),
+        endTime: nowISO,
       };
 
-      setTaskLogs((prev) => [...prev, completed]);
-      saveTaskToFirestore(completed);
+      await saveCompletedTask(completed);
     }
 
-    /* -------------------------------------------------------
-       SHIFT END LOGIC:
-       ✔ Store final "Shift End" entry with 0 duration
-       ✔ Remove from currentTasks (no live counting)
-       ✔ STOP creating new running tasks
-    ------------------------------------------------------- */
+    // SHIFT END: log shift end + remove from activeTasks
     if (task.toLowerCase().includes("shift end")) {
-      const finalTask = {
-        employeeId,
+      const shiftEndRow = {
+        employeeId: id,
         task: "Shift End",
         department,
-        startTime: now.toISOString(),
-        endTime: now.toISOString(), // duration = 0
+        startTime: nowISO,
+        endTime: nowISO,
       };
 
-      setTaskLogs((prev) => [...prev, finalTask]);
-      saveTaskToFirestore(finalTask);
+      await saveCompletedTask(shiftEndRow);
 
-      // REMOVE from currentTasks so Live View stops showing it
-      setCurrentTasks((prev) => {
-        const updated = { ...prev };
-        delete updated[employeeId];
-        return updated;
-      });
+      try {
+        await deleteDoc(doc(db, "activeTasks", id));
+      } catch (err) {
+        console.error("🔥 delete activeTasks error:", err);
+      }
 
       setEmployeeId("");
       setIsAdmin(false);
@@ -172,19 +206,20 @@ function App() {
       return;
     }
 
-    /* -------------------------------------------------------
-       NORMAL TASK START
-    ------------------------------------------------------- */
-    const newTask = {
-      employeeId,
+    // NORMAL TASK: write active task to Firestore
+    const activeTask = {
+      employeeId: id,
       task,
       department,
-      startTime: now.toISOString(),
+      startTime: nowISO,
       endTime: null,
     };
 
-    setCurrentTasks((prev) => ({ ...prev, [employeeId]: newTask }));
-    saveTaskToFirestore(newTask);
+    try {
+      await setDoc(doc(db, "activeTasks", id), activeTask);
+    } catch (err) {
+      console.error("🔥 set activeTasks error:", err);
+    }
 
     setEmployeeId("");
     setIsAdmin(false);
@@ -192,81 +227,111 @@ function App() {
   };
 
   /* ------------------------------------
-     CALCULATE DURATION
+     DURATION
   ------------------------------------ */
-  const getDuration = (task) => {
-    const start = new Date(task.startTime);
-    const end = task.endTime ? new Date(task.endTime) : new Date();
+  const getDuration = (t) => {
+    const start = new Date(t.startTime);
+    const end = t.endTime ? new Date(t.endTime) : new Date();
     const diff = Math.floor((end - start) / 1000);
-
     const h = String(Math.floor(diff / 3600)).padStart(2, "0");
     const m = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
     const s = String(diff % 60).padStart(2, "0");
-
     return `${h}:${m}:${s}`;
   };
 
   /* ------------------------------------
-     CSV EXPORT (NO RUNNING TASKS)
+     EXPORT CSV (COMPLETED LOGS ONLY)
+     FIXED header order + fixed row order
   ------------------------------------ */
-  const exportCSV = (rows) => {
-    if (rows.length === 0) return;
+  const exportCSV = async () => {
+    try {
+      const q = query(collection(db, "taskLogs"), orderBy("startTime", "asc"));
+      const snap = await getDocs(q);
+      const logs = snap.docs.map(d => d.data());
 
-    // Filter out ongoing tasks (endTime = null)
-    const completedOnly = rows.filter((r) => r.endTime !== null);
+      if (logs.length === 0) {
+        console.warn("No completed logs to export.");
+        return;
+      }
 
-    const enriched = completedOnly.map((r) => ({
-      ...r,
-      duration: getDuration(r),
-    }));
+      // Enrich with duration and sanitize order
+      const enriched = logs
+        .filter(isValidCompletedRow)
+        .map(r => ({
+          ...r,
+          duration: getDuration(r),
+        }));
 
-    const grouped = {};
-    enriched.forEach((r) => {
-      if (!grouped[r.employeeId]) grouped[r.employeeId] = [];
-      grouped[r.employeeId].push(r);
-    });
-
-    const employees = Object.keys(grouped).sort();
-    let csv = "";
-
-    employees.forEach((emp) => {
-      csv += `Employee: ${emp}\n`;
-
-      const sorted = grouped[emp].sort(
-        (a, b) => new Date(a.startTime) - new Date(b.startTime)
-      );
-
-      const headers = Object.keys(sorted[0]).join(",");
-      csv += headers + "\n";
-
-      sorted.forEach((row) => {
-        csv += Object.values(row)
-          .map((v) => `"${v}"`)
-          .join(",") + "\n";
+      // Group by employee
+      const grouped = {};
+      enriched.forEach(r => {
+        if (!grouped[r.employeeId]) grouped[r.employeeId] = [];
+        grouped[r.employeeId].push(r);
       });
 
-      csv += "\n";
-    });
+      const employees = Object.keys(grouped).sort();
+      let csv = "";
 
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
+      employees.forEach(emp => {
+        csv += `Employee: ${emp}\n`;
+        csv += CSV_HEADERS.join(",") + "\n";
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "task-report.csv";
-    a.click();
+        const rows = grouped[emp].sort(
+          (a, b) => new Date(a.startTime) - new Date(b.startTime)
+        );
+
+        rows.forEach(row => {
+          const line = CSV_HEADERS.map(h => `"${row[h] ?? ""}"`).join(",");
+          csv += line + "\n";
+        });
+
+        csv += "\n";
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "task-report.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("🔥 CSV export error:", err);
+    }
   };
 
   /* ------------------------------------
      VALIDATE INPUT
   ------------------------------------ */
-  const validEmployeeId = (id) => {
-    const pattern = /^[a-z]+(?:\.[a-z]+)(?:\d+)?$/;
-    return pattern.test(id);
+  const validEmployeeId = (id) => /^[a-z]+(?:\.[a-z]+)(?:\d+)?$/.test(id);
+
+  /* ------------------------------------
+     CLEAR DATA (taskLogs + activeTasks)
+  ------------------------------------ */
+  const clearAllFirestoreData = async () => {
+    try {
+      const logSnap = await getDocs(collection(db, "taskLogs"));
+      await Promise.all(logSnap.docs.map(d =>
+        deleteDoc(doc(db, "taskLogs", d.id))
+      ));
+
+      const activeSnap = await getDocs(collection(db, "activeTasks"));
+      await Promise.all(activeSnap.docs.map(d =>
+        deleteDoc(doc(db, "activeTasks", d.id))
+      ));
+
+      setTaskLogs([]);
+      setCurrentTasks({});
+    } catch (err) {
+      console.error("🔥 Clear all data error:", err);
+    }
   };
 
   /* ------------------------------------
-     CLEAR DATA DIALOG
+     CLEAR DIALOG
   ------------------------------------ */
   const ClearDataDialog = () => (
     <div className="dialog-overlay">
@@ -278,9 +343,7 @@ function App() {
           <button
             className="confirm-clear"
             onClick={async () => {
-              setTaskLogs([]);
-              setCurrentTasks({});
-              await clearFirestoreData();
+              await clearAllFirestoreData();
               setShowClearDialog(false);
             }}
           >
@@ -303,7 +366,6 @@ function App() {
   ------------------------------------ */
   return (
     <div id="root">
-
       {showClearDialog && <ClearDataDialog />}
 
       <div className={isCentered ? "center-screen" : "top-screen"}>
@@ -316,29 +378,17 @@ function App() {
               value={employeeId}
               onChange={(e) => {
                 const value = e.target.value.toLowerCase().trim();
-
-                if (value === "") {
-                  setEmployeeId("");
-                  return;
-                }
-
+                if (value === "") return setEmployeeId("");
                 if (!validEmployeeId(value)) {
-                  setInputError(
-                    "Invalid format. Use firstname.lastname or firstname.lastname2"
-                  );
-                  setEmployeeId(value);
-                  return;
+                  setInputError("Invalid format. Use firstname.lastname or firstname.lastname2");
+                  return setEmployeeId(value);
                 }
-
                 setInputError("");
                 setEmployeeId(value);
               }}
               autoFocus
             />
-
-            {inputError && (
-              <div className="input-error">{inputError}</div>
-            )}
+            {inputError && <div className="input-error">{inputError}</div>}
           </>
         )}
       </div>
@@ -349,22 +399,13 @@ function App() {
           <h2>ADMIN MODE ({employeeId})</h2>
 
           <div className="admin-buttons">
-            <button onClick={() => setShowLive((v) => !v)}>
+            <button onClick={() => setShowLive(v => !v)}>
               {showLive ? "Hide Live View" : "View Live"}
             </button>
 
-            <button
-              onClick={() =>
-                exportCSV([...taskLogs, ...Object.values(currentTasks)])
-              }
-            >
-              Download CSV
-            </button>
+            <button onClick={exportCSV}>Download CSV</button>
 
-            <button
-              className="clear-data"
-              onClick={() => setShowClearDialog(true)}
-            >
+            <button className="clear-data" onClick={() => setShowClearDialog(true)}>
               Clear Data
             </button>
 
@@ -406,16 +447,12 @@ function App() {
       {/* TASK BUTTONS */}
       {!isAdmin && employeeId && (
         <div className="task-grid">
-          {DEPARTMENT_ORDER.map((dep) => (
+          {DEPARTMENT_ORDER.map(dep => (
             <div className="task-group" key={dep}>
               <h3>{dep}</h3>
-
               <div className="task-buttons">
-                {DEPARTMENTS[dep].map((task) => (
-                  <button
-                    key={task}
-                    onClick={() => handleTaskChange(task, dep)}
-                  >
+                {DEPARTMENTS[dep].map(task => (
+                  <button key={task} onClick={() => handleTaskChange(task, dep)}>
                     {task}
                   </button>
                 ))}
