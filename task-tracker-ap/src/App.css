@@ -178,7 +178,7 @@ button.exit-admin:hover {
 }
 
 /* ----------------------------------
-   LIVE VIEW TABLE
+   LIVE VIEW TABLE (IMPROVED SPACING)
 ---------------------------------- */
 .live-container {
   width: 100%;
@@ -187,26 +187,50 @@ button.exit-admin:hover {
   margin-top: 1rem;
 
   display: flex;
-  justify-content: center;   /* centers the table */
+  justify-content: center;         /* keeps table centered */
 }
 
 table {
-  width: auto;              /* shrink to content */
-  min-width: 600px;         /* keeps readable layout */
+  width: auto;
+  min-width: 750px;                /* bigger so columns breathe */
   border-collapse: collapse;
-  font-size: clamp(0.7rem, 1.5vw, 1rem);
+  font-size: clamp(0.8rem, 1.6vw, 1.1rem);
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;                /* keeps rounded edges clean */
 }
 
 table th {
   background-color: var(--title-color);
   color: white;
-  padding: 0.4rem;
-  border: 1px solid var(--border-color);   /* FIX */
+  padding: 0.9rem 1.2rem;          /* BIGGER HEADER CELLS */
+  border: 1px solid var(--border-color);
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;             /* keeps headers on one line */
 }
 
 table td {
   border: 1px solid var(--border-color);
-  padding: 0.4rem;
+  padding: 0.8rem 1.2rem;          /* BIGGER ROW CELLS */
+  text-align: center;
+  vertical-align: middle;
+  background: #FAFAFA;
+}
+
+table tr:nth-child(even) td {
+  background: #F0F3FF;             /* subtle alternating row color */
+}
+
+/* Make table nicely readable on phones */
+@media (max-width: 600px) {
+  table {
+    min-width: 100%;
+  }
+  table th, table td {
+    padding: 0.7rem 0.5rem;
+    font-size: 0.9rem;
+  }
 }
 
 /* DIALOG OVERLAY */
