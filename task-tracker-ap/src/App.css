@@ -20,7 +20,8 @@ body {
   font-family: "Segoe UI", "Roboto", sans-serif;
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 #root {
@@ -29,7 +30,8 @@ body {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* ----------------------------------
@@ -319,4 +321,61 @@ table tr:nth-child(even) td {
   input::placeholder {
     color: #444444 !important;
   }
+}
+
+/* WEEKLY HISTORY TABLE */
+.history-table {
+  width: 100%;
+  max-width: 700px;
+  margin: 1rem auto;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  background: #fff;
+}
+
+.history-table th {
+  background: var(--title-color);
+  color: #fff;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border-color);
+}
+
+.history-table td {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border-color);
+  background: #fafafa;
+  text-align: center;
+}
+
+.history-block {
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.history-output h3 {
+  margin-top: 1.8rem;
+  margin-bottom: 0.6rem;
+  color: var(--heading-color);
+}
+
+.admin-scroll {
+  overflow-y: auto;
+  max-height: 100vh;
+  padding-bottom: 2rem;
+}
+
+.history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;        /* spacing between all items */
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.history-controls label {
+  display: flex;
+  flex-direction: column;
+  font-weight: 500;
+  gap: 0.3rem;        /* space between label text & input */
 }
