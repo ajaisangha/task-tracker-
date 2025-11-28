@@ -9,7 +9,8 @@ import {
   setDoc,
   onSnapshot,
   query,
-  orderBy
+  orderBy,
+  where,
 } from "firebase/firestore";
 import "./App.css";
 
@@ -58,7 +59,7 @@ const DEPARTMENTS = {
   ],
 };
 
-// FIXED CSV HEADER ORDER (your required format)
+// FIXED CSV HEADER ORDER FOR CURRENT LOGS
 const CSV_HEADERS = ["task", "department", "startTime", "endTime", "duration"];
 
 function App() {
@@ -71,13 +72,18 @@ function App() {
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [inputError, setInputError] = useState("");
 
+  // Weekly history UI state
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyDate, setHistoryDate] = useState("");     // yyyy-mm-dd
+  const [historyRows, setHistoryRows] = useState([]);     // rows from weeklyHistory
+
   const isCentered = !employeeId && !isAdmin;
 
   /* ------------------------------------
      DURATION TIMER (live view refresh)
   ------------------------------------ */
   useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -88,7 +94,7 @@ function App() {
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "activeTasks"), (snap) => {
       const activeMap = {};
-      snap.forEach(d => {
+      snap.forEach((d) => {
         activeMap[d.id] = d.data();
       });
       setCurrentTasks(activeMap);
@@ -105,7 +111,7 @@ function App() {
       try {
         const q = query(collection(db, "taskLogs"), orderBy("startTime", "asc"));
         const snap = await getDocs(q);
-        setTaskLogs(snap.docs.map(d => d.data()));
+        setTaskLogs(snap.docs.map((d) => d.data()));
       } catch (err) {
         console.error("🔥 Load taskLogs error:", err);
       }
@@ -125,6 +131,7 @@ function App() {
     setIsAdmin(false);
     setEmployeeId("");
     setShowLive(false);
+    setShowHistory(false);
   };
 
   /* ------------------------------------
@@ -151,7 +158,7 @@ function App() {
     }
     try {
       await addDoc(collection(db, "taskLogs"), task);
-      setTaskLogs(prev => [...prev, task]);
+      setTaskLogs((prev) => [...prev, task]);
     } catch (err) {
       console.error("🔥 Firestore write error:", err);
     }
@@ -227,44 +234,49 @@ function App() {
   };
 
   /* ------------------------------------
-     DURATION
+     DURATION HELPERS
   ------------------------------------ */
   const getDuration = (t) => {
     const start = new Date(t.startTime);
     const end = t.endTime ? new Date(t.endTime) : new Date();
     const diff = Math.floor((end - start) / 1000);
-    const h = String(Math.floor(diff / 3600)).padStart(2, "0");
-    const m = String(Math.floor((diff % 3600) / 60)).padStart(2, "0");
-    const s = String(diff % 60).padStart(2, "0");
+    return formatDurationFromSecs(diff);
+  };
+
+  const formatDurationFromSecs = (secs) => {
+    const safe = Math.max(0, Math.floor(secs || 0));
+    const h = String(Math.floor(safe / 3600)).padStart(2, "0");
+    const m = String(Math.floor((safe % 3600) / 60)).padStart(2, "0");
+    const s = String(safe % 60).padStart(2, "0");
     return `${h}:${m}:${s}`;
   };
 
   /* ------------------------------------
-     EXPORT CSV (COMPLETED LOGS ONLY)
+     EXPORT CSV (CURRENT COMPLETED LOGS)
      FIXED header order + fixed row order
   ------------------------------------ */
   const exportCSV = async () => {
     try {
-      const q = query(collection(db, "taskLogs"), orderBy("startTime", "asc"));
-      const snap = await getDocs(q);
-      const logs = snap.docs.map(d => d.data());
+      const qLogs = query(collection(db, "taskLogs"), orderBy("startTime", "asc"));
+      const snap = await getDocs(qLogs);
+      const logs = snap.docs.map((d) => d.data());
 
       if (logs.length === 0) {
         console.warn("No completed logs to export.");
         return;
       }
 
-      // Enrich with duration and sanitize order
+      // Enrich with duration and sanitize
       const enriched = logs
         .filter(isValidCompletedRow)
-        .map(r => ({
+        .map((r) => ({
           ...r,
           duration: getDuration(r),
         }));
 
       // Group by employee
       const grouped = {};
-      enriched.forEach(r => {
+      enriched.forEach((r) => {
         if (!grouped[r.employeeId]) grouped[r.employeeId] = [];
         grouped[r.employeeId].push(r);
       });
@@ -272,7 +284,7 @@ function App() {
       const employees = Object.keys(grouped).sort();
       let csv = "";
 
-      employees.forEach(emp => {
+      employees.forEach((emp) => {
         csv += `Employee: ${emp}\n`;
         csv += CSV_HEADERS.join(",") + "\n";
 
@@ -280,8 +292,8 @@ function App() {
           (a, b) => new Date(a.startTime) - new Date(b.startTime)
         );
 
-        rows.forEach(row => {
-          const line = CSV_HEADERS.map(h => `"${row[h] ?? ""}"`).join(",");
+        rows.forEach((row) => {
+          const line = CSV_HEADERS.map((h) => `"${row[h] ?? ""}"`).join(",");
           csv += line + "\n";
         });
 
@@ -304,31 +316,161 @@ function App() {
   };
 
   /* ------------------------------------
+     WEEKLY HISTORY HELPERS
+  ------------------------------------ */
+
+  // Compute Monday–Sunday week range for given yyyy-mm-dd
+  const getWeekRangeForDate = (dateStr) => {
+    const base = new Date(dateStr + "T00:00:00");
+    if (Number.isNaN(base.getTime())) return null;
+
+    const day = base.getDay(); // 0 = Sunday, 1 = Monday, ...
+    const diffToMonday = (day + 6) % 7; // days since Monday
+    const monday = new Date(base);
+    monday.setDate(base.getDate() - diffToMonday);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    const toYMD = (d) => d.toISOString().slice(0, 10);
+
+    return {
+      start: toYMD(monday),
+      end: toYMD(sunday),
+    };
+  };
+
+  // Load weekly history rows from weeklyHistory collection
+  const loadWeeklyHistory = async () => {
+    if (!historyDate) return;
+
+    const range = getWeekRangeForDate(historyDate);
+    if (!range) return;
+
+    try {
+      const qHist = query(
+        collection(db, "weeklyHistory"),
+        where("date", ">=", range.start),
+        where("date", "<=", range.end)
+      );
+      const snap = await getDocs(qHist);
+      const rows = snap.docs.map((d) => d.data());
+      setHistoryRows(rows);
+    } catch (err) {
+      console.error("🔥 Weekly history load error:", err);
+    }
+  };
+
+  // Weekly CSV: grouped by employee, then task
+  const exportWeeklyCSV = () => {
+    if (!historyRows.length) return;
+
+    const grouped = {};
+    historyRows.forEach((row) => {
+      if (!grouped[row.employeeId]) grouped[row.employeeId] = {};
+      if (!grouped[row.employeeId][row.task]) grouped[row.employeeId][row.task] = [];
+      grouped[row.employeeId][row.task].push(row);
+    });
+
+    const employees = Object.keys(grouped).sort();
+    let csv = "";
+
+    employees.forEach((emp) => {
+      csv += `Employee: ${emp}\n`;
+      csv += "task,department,date,duration\n";
+
+      const tasksByName = grouped[emp];
+      Object.keys(tasksByName)
+        .sort()
+        .forEach((taskName) => {
+          const rows = tasksByName[taskName].sort((a, b) =>
+            a.date.localeCompare(b.date)
+          );
+          rows.forEach((r) => {
+            const durationStr = formatDurationFromSecs(r.durationSecs || 0);
+            csv += [
+              `"${r.task}"`,
+              `"${r.department || ""}"`,
+              `"${r.date}"`,
+              `"${durationStr}"`,
+            ].join(",") + "\n";
+          });
+        });
+
+      csv += "\n";
+    });
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "weekly-history.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  /* ------------------------------------
+     MOVE LOGS → WEEKLY HISTORY ON CLEAR
+  ------------------------------------ */
+  const moveLogsToHistoryAndClear = async () => {
+    try {
+      // 1) Get all completed logs
+      const logSnap = await getDocs(collection(db, "taskLogs"));
+      const logDocs = logSnap.docs.map((d) => d.data());
+
+      // 2) For each log, write a weeklyHistory entry
+      const writes = logDocs
+        .filter(isValidCompletedRow)
+        .map((log) => {
+          const start = new Date(log.startTime);
+          const end = new Date(log.endTime);
+          const durationSecs = Math.max(
+            0,
+            Math.floor((end - start) / 1000)
+          );
+          const dateStr = log.startTime.slice(0, 10); // yyyy-mm-dd
+
+          const historyDoc = {
+            employeeId: log.employeeId,
+            task: log.task,
+            department: log.department,
+            durationSecs,
+            date: dateStr,
+          };
+
+          return addDoc(collection(db, "weeklyHistory"), historyDoc);
+        });
+
+      await Promise.all(writes);
+
+      // 3) Clear taskLogs
+      const deleteLogPromises = logSnap.docs.map((d) =>
+        deleteDoc(doc(db, "taskLogs", d.id))
+      );
+      await Promise.all(deleteLogPromises);
+
+      // 4) Clear activeTasks
+      const activeSnap = await getDocs(collection(db, "activeTasks"));
+      const deleteActivePromises = activeSnap.docs.map((d) =>
+        deleteDoc(doc(db, "activeTasks", d.id))
+      );
+      await Promise.all(deleteActivePromises);
+
+      // 5) Clear local state
+      setTaskLogs([]);
+      setCurrentTasks([]);
+    } catch (err) {
+      console.error("🔥 Move logs & clear error:", err);
+    }
+  };
+
+  /* ------------------------------------
      VALIDATE INPUT
   ------------------------------------ */
   const validEmployeeId = (id) => /^[a-z]+(?:\.[a-z]+)(?:\d+)?$/.test(id);
-
-  /* ------------------------------------
-     CLEAR DATA (taskLogs + activeTasks)
-  ------------------------------------ */
-  const clearAllFirestoreData = async () => {
-    try {
-      const logSnap = await getDocs(collection(db, "taskLogs"));
-      await Promise.all(logSnap.docs.map(d =>
-        deleteDoc(doc(db, "taskLogs", d.id))
-      ));
-
-      const activeSnap = await getDocs(collection(db, "activeTasks"));
-      await Promise.all(activeSnap.docs.map(d =>
-        deleteDoc(doc(db, "activeTasks", d.id))
-      ));
-
-      setTaskLogs([]);
-      setCurrentTasks({});
-    } catch (err) {
-      console.error("🔥 Clear all data error:", err);
-    }
-  };
 
   /* ------------------------------------
      CLEAR DIALOG
@@ -337,17 +479,20 @@ function App() {
     <div className="dialog-overlay">
       <div className="dialog-box">
         <h3>Clear All Data?</h3>
-        <p>This will delete all logs from Database and this device.</p>
+        <p>
+          This will move completed logs to weekly history, then clear current
+          logs and live tasks from this device and database.
+        </p>
 
         <div className="dialog-buttons">
           <button
             className="confirm-clear"
             onClick={async () => {
-              await clearAllFirestoreData();
+              await moveLogsToHistoryAndClear();
               setShowClearDialog(false);
             }}
           >
-            Clear
+            Move to History & Clear
           </button>
 
           <button
@@ -380,7 +525,9 @@ function App() {
                 const value = e.target.value.toLowerCase().trim();
                 if (value === "") return setEmployeeId("");
                 if (!validEmployeeId(value)) {
-                  setInputError("Invalid format. Use firstname.lastname or firstname.lastname2");
+                  setInputError(
+                    "Invalid format. Use firstname.lastname or firstname.lastname2"
+                  );
                   return setEmployeeId(value);
                 }
                 setInputError("");
@@ -399,14 +546,23 @@ function App() {
           <h2>ADMIN MODE ({employeeId})</h2>
 
           <div className="admin-buttons">
-            <button onClick={() => setShowLive(v => !v)}>
+            <button onClick={() => setShowLive((v) => !v)}>
               {showLive ? "Hide Live View" : "View Live"}
             </button>
 
-            <button onClick={exportCSV}>Download CSV</button>
+            <button onClick={exportCSV}>Download Current CSV</button>
 
-            <button className="clear-data" onClick={() => setShowClearDialog(true)}>
-              Clear Data
+            <button
+              className="clear-data"
+              onClick={() => setShowClearDialog(true)}
+            >
+              Move to History & Clear
+            </button>
+
+            <button
+              onClick={() => setShowHistory((v) => !v)}
+            >
+              {showHistory ? "Hide Weekly History" : "View Weekly History"}
             </button>
 
             <button className="exit-admin" onClick={exitAdminMode}>
@@ -444,15 +600,84 @@ function App() {
         </div>
       )}
 
+      {/* WEEKLY HISTORY VIEW */}
+      {isAdmin && showHistory && (
+        <div className="history-container">
+          <h2>Weekly History</h2>
+
+          <div className="history-controls">
+            <label>
+              Week containing date:{" "}
+              <input
+                type="date"
+                value={historyDate}
+                onChange={(e) => setHistoryDate(e.target.value)}
+              />
+            </label>
+            <button onClick={loadWeeklyHistory} disabled={!historyDate}>
+              Load Week
+            </button>
+            <button
+              onClick={exportWeeklyCSV}
+              disabled={!historyRows.length}
+            >
+              Download Weekly CSV
+            </button>
+          </div>
+
+          {/* Grouped display: by employee → by task */}
+          <div className="history-groups">
+            {historyRows.length === 0 && historyDate && (
+              <p>No history records found for that week.</p>
+            )}
+
+            {Object.entries(
+              historyRows.reduce((acc, row) => {
+                if (!acc[row.employeeId]) acc[row.employeeId] = {};
+                if (!acc[row.employeeId][row.task])
+                  acc[row.employeeId][row.task] = [];
+                acc[row.employeeId][row.task].push(row);
+                return acc;
+              }, {})
+            )
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([emp, tasksObj]) => (
+                <div className="history-employee" key={emp}>
+                  <h3>{emp}</h3>
+                  {Object.entries(tasksObj)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([taskName, rows]) => (
+                      <div className="history-task" key={taskName}>
+                        <h4>{taskName}</h4>
+                        <ul>
+                          {rows
+                            .sort((a, b) => a.date.localeCompare(b.date))
+                            .map((r, idx) => (
+                              <li key={idx}>
+                                {r.date} — {formatDurationFromSecs(r.durationSecs || 0)}
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    ))}
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
       {/* TASK BUTTONS */}
       {!isAdmin && employeeId && (
         <div className="task-grid">
-          {DEPARTMENT_ORDER.map(dep => (
+          {DEPARTMENT_ORDER.map((dep) => (
             <div className="task-group" key={dep}>
               <h3>{dep}</h3>
               <div className="task-buttons">
-                {DEPARTMENTS[dep].map(task => (
-                  <button key={task} onClick={() => handleTaskChange(task, dep)}>
+                {DEPARTMENTS[dep].map((task) => (
+                  <button
+                    key={task}
+                    onClick={() => handleTaskChange(task, dep)}
+                  >
                     {task}
                   </button>
                 ))}
