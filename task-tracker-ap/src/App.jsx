@@ -1,13 +1,3 @@
-// ===============================
-// FULL UPDATED App.jsx
-// With Date Range History,
-// Merged rows,
-// Pre-confirmation dialog,
-// Clear logic,
-// Admin scroll,
-// Stable UI
-// ===============================
-
 import React, { useState, useEffect } from "react";
 import { db } from "./firebase";
 import {
@@ -27,7 +17,8 @@ import "./App.css";
 // ===============================
 // CONSTANTS
 // ===============================
-const ADMIN_IDS = ["ajaypal.sangha", "abin.thomas", "camilo.torres"];
+const ADMIN_IDS = ["ajaypal.sangha", "abin.thomas", "camilo.torres", "ishant.pruthi", "hardik.rana", "Sunny.Au-Yeung",
+                    ""];
 
 const DEPARTMENT_ORDER = [
   "Others",
@@ -37,8 +28,17 @@ const DEPARTMENT_ORDER = [
   "Decant",
   "Freezer",
   "Dispatch",
+  "IC"
 ];
-
+/*
+IC
+IMS
+Inbound Office
+Investigating non-cons
+Investigating SKUs
+Tracking POs
+Purge tasks
+*/
 const DEPARTMENTS = {
   Others: ["Shift End", "Washroom", "Break", "Move To Another Department"],
   "Tote Wash": ["Tote Wash", "Tote Wash Cleanup", "Move Pallets"],
@@ -69,7 +69,15 @@ const DEPARTMENTS = {
     "Van Dekit",
     "Trailer Dekit",
     "Trailer Loading",
+    "Consolidation",
   ],
+  IC: ["IMS",
+        "Inbound Office",
+        "Investigating non-cons",
+        "Investigating SKUs",
+        "Tracking POs",
+        "Purge tasks",
+      ]
 };
 
 const CSV_HEADERS = ["task", "department", "startTime", "endTime", "duration"];
