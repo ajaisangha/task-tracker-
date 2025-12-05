@@ -17,8 +17,15 @@ import "./App.css";
 // ===============================
 // CONSTANTS
 // ===============================
-const ADMIN_IDS = ["ajaypal.sangha", "abin.thomas", "camilo.torres", "ishant.pruthi", "hardik.rana", "Sunny.Au-Yeung",
-                    "arjaree.leenaungkoonruji"];
+const ADMIN_IDS = [
+  "ajaypal.sangha",
+  "abin.thomas",
+  "camilo.torres",
+  "ishant.pruthi",
+  "hardik.rana",
+  "sunny.au-yeung",
+  "arjaree.leenaungkoonruji",
+];
 
 const DEPARTMENT_ORDER = [
   "Others",
@@ -28,21 +35,18 @@ const DEPARTMENT_ORDER = [
   "Decant",
   "Freezer",
   "Dispatch",
-  "IC"
+  "IC",
 ];
-/*
-IC
-IMS
-Inbound Office
-Investigating non-cons
-Investigating SKUs
-Tracking POs
-Purge tasks
-*/
+
 const DEPARTMENTS = {
   Others: ["Shift End", "Washroom", "Break", "Move To Another Department"],
   "Tote Wash": ["Tote Wash", "Tote Wash Cleanup", "Move Pallets"],
-  Pick: ["Ambient Picking", "Ambient Pick Cleanup", "Chill Picking", "Chill Pick Cleanup"],
+  Pick: [
+    "Ambient Picking",
+    "Ambient Pick Cleanup",
+    "Chill Picking",
+    "Chill Pick Cleanup",
+  ],
   Bagging: ["Bagging", "Bagging Runner", "Bagging Cleanup"],
   Decant: [
     "MHE",
@@ -71,13 +75,14 @@ const DEPARTMENTS = {
     "Trailer Loading",
     "Consolidation",
   ],
-  IC: ["IMS",
-        "Inbound Office",
-        "Investigating non-cons",
-        "Investigating SKUs",
-        "Tracking POs",
-        "Purge tasks",
-      ]
+  IC: [
+    "IMS",
+    "Inbound Office",
+    "Investigating non-cons",
+    "Investigating SKUs",
+    "Tracking POs",
+    "Purge tasks",
+  ],
 };
 
 const CSV_HEADERS = ["task", "department", "startTime", "endTime", "duration"];
@@ -110,11 +115,13 @@ function App() {
   const [showClearDialog, setShowClearDialog] = useState(false);
   const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false);
 
-  // NEW: Pre-confirmation dialog
+  // Pre-confirmation dialog
   const [showPreConfirmDialog, setShowPreConfirmDialog] = useState(false);
   const [pendingAction, setPendingAction] = useState(null); // "clearHistory", "clearCurrent"
 
   const isCentered = !employeeId && !isAdmin;
+
+  const employeeIdRegex = /^[a-z]+(?:\.[a-z]+)(?:\d+)?$/;
 
   // ===============================
   // TIMER FOR LIVE DURATION
@@ -161,6 +168,7 @@ function App() {
     setEmployeeId("");
     setShowLive(false);
     setShowHistory(false);
+    setInputError("");
   };
 
   // ===============================
@@ -180,6 +188,13 @@ function App() {
   // ===============================
   const handleTaskChange = async (task, department) => {
     const id = employeeId.trim();
+
+    // HARD GUARD: do not allow if ID invalid
+    if (!employeeIdRegex.test(id)) {
+      setInputError("Invalid format");
+      return;
+    }
+
     const now = new Date().toISOString();
 
     // Close previous task if exists
@@ -265,7 +280,9 @@ function App() {
   // EXPORT CURRENT CSV
   // ===============================
   const exportCSV = async () => {
-    const snap = await getDocs(query(collection(db, "taskLogs"), orderBy("startTime")));
+    const snap = await getDocs(
+      query(collection(db, "taskLogs"), orderBy("startTime"))
+    );
     const rows = snap.docs.map((d) => d.data());
     if (!rows.length) return;
 
@@ -401,10 +418,7 @@ function App() {
   // ===============================
   return (
     <div id="root">
-
-      {/* =======================
-          PRE-CONFIRMATION DIALOG
-      ======================== */}
+      {/* PRE-CONFIRMATION DIALOG */}
       {showPreConfirmDialog && (
         <div className="dialog-overlay">
           <div className="dialog-box">
@@ -442,9 +456,7 @@ function App() {
         </div>
       )}
 
-      {/* =======================
-          CLEAR CURRENT DATA DIALOG
-      ======================== */}
+      {/* CLEAR CURRENT DATA DIALOG */}
       {showClearDialog && (
         <div className="dialog-overlay">
           <div className="dialog-box">
@@ -473,9 +485,7 @@ function App() {
         </div>
       )}
 
-      {/* =======================
-          CLEAR HISTORY DIALOG
-      ======================== */}
+      {/* CLEAR HISTORY DIALOG */}
       {showClearHistoryDialog && (
         <div className="dialog-overlay">
           <div className="dialog-box">
@@ -504,9 +514,7 @@ function App() {
         </div>
       )}
 
-      {/* =======================
-          MAIN TITLE + INPUT
-      ======================== */}
+      {/* MAIN TITLE + INPUT */}
       <div className={isCentered ? "center-screen" : "top-screen"}>
         <h1>Task Tracker</h1>
 
@@ -517,11 +525,21 @@ function App() {
               value={employeeId}
               onChange={(e) => {
                 const v = e.target.value.toLowerCase().trim();
-                if (!v) return setEmployeeId("");
-                if (!/^[a-z]+(?:\.[a-z]+)(?:\d+)?$/.test(v)) {
-                  setInputError("Invalid format");
-                  return setEmployeeId(v);
+
+                if (!v) {
+                  setEmployeeId("");
+                  setInputError("");
+                  return;
                 }
+
+                if (!employeeIdRegex.test(v)) {
+                  setInputError(
+                    "Invalid format. Use firstname.lastname or firstname.lastname2"
+                  );
+                  setEmployeeId(v);
+                  return;
+                }
+
                 setInputError("");
                 setEmployeeId(v);
               }}
@@ -532,26 +550,19 @@ function App() {
         )}
       </div>
 
-      {/* =======================
-          ADMIN MODE
-      ======================== */}
+      {/* ADMIN MODE */}
       {isAdmin && (
         <div className="admin-scroll">
-
           <div style={{ textAlign: "center" }}>
             <h2>ADMIN MODE ({employeeId})</h2>
 
             <div className="admin-buttons">
-
               <button onClick={() => setShowLive(!showLive)}>
                 {showLive ? "Hide Live View" : "View Live"}
               </button>
 
-              <button onClick={exportCSV}>
-                Download Current CSV
-              </button>
+              <button onClick={exportCSV}>Download Current CSV</button>
 
-              {/* NEW pre-confirm dialog trigger */}
               <button
                 className="clear-data"
                 onClick={() => {
@@ -566,7 +577,6 @@ function App() {
                 {showHistory ? "Hide History" : "View History"}
               </button>
 
-              {/* NEW pre-confirm dialog trigger */}
               <button
                 className="clear-data"
                 onClick={() => {
@@ -580,13 +590,10 @@ function App() {
               <button className="exit-admin" onClick={exitAdminMode}>
                 Exit Admin Mode
               </button>
-
             </div>
           </div>
 
-          {/* =======================
-              LIVE VIEW
-          ======================== */}
+          {/* LIVE VIEW */}
           {showLive && (
             <div className="live-container">
               <table>
@@ -614,9 +621,7 @@ function App() {
             </div>
           )}
 
-          {/* =======================
-              HISTORY VIEW
-          ======================== */}
+          {/* HISTORY VIEW */}
           {showHistory && (
             <div className="history-container">
               <h2 style={{ textAlign: "center", marginBottom: "8px" }}>
@@ -650,13 +655,17 @@ function App() {
                   />
                 </label>
 
-                <button onClick={loadDateRangeHistory}
-                        disabled={!startDate || !endDate}>
+                <button
+                  onClick={loadDateRangeHistory}
+                  disabled={!startDate || !endDate}
+                >
                   Load
                 </button>
 
-                <button onClick={exportWeeklyCSV}
-                        disabled={!historyRows.length}>
+                <button
+                  onClick={exportWeeklyCSV}
+                  disabled={!historyRows.length}
+                >
                   Download CSV
                 </button>
 
@@ -673,7 +682,6 @@ function App() {
                 </button>
               </div>
 
-              {/* Results */}
               <div className="history-output">
                 {historyLoaded && historyRows.length === 0 && (
                   <p>No records found.</p>
@@ -715,24 +723,24 @@ function App() {
                       </table>
                     </div>
                   ))}
-
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* =======================
-          USER MODE (TASK BUTTONS)
-      ======================== */}
-      {!isAdmin && employeeId && (
+      {/* USER MODE (TASK BUTTONS) */}
+      {!isAdmin && employeeId && !inputError && (
         <div className="task-grid">
           {DEPARTMENT_ORDER.map((dep) => (
             <div key={dep} className="task-group">
               <h3>{dep}</h3>
               <div className="task-buttons">
                 {DEPARTMENTS[dep].map((task) => (
-                  <button key={task} onClick={() => handleTaskChange(task, dep)}>
+                  <button
+                    key={task}
+                    onClick={() => handleTaskChange(task, dep)}
+                  >
                     {task}
                   </button>
                 ))}
@@ -741,7 +749,6 @@ function App() {
           ))}
         </div>
       )}
-
     </div>
   );
 }
