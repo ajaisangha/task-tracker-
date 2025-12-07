@@ -323,70 +323,86 @@ function App() {
   };
 
   // ===============================
-  // FILTER HELPERS (AND logic)
-  // ===============================
-  const applyLiveFilters = (rows) => {
-    return rows.filter((t) => {
-      // Employee ID filter
-      if (filterEmployeeIdEnabled) {
-        const term = filterEmployeeId.trim().toLowerCase();
-        if (!term || !t.employeeId?.toLowerCase().includes(term)) return false;
+// FILTER HELPERS (AND logic) — UPDATED
+// Supports MULTIPLE employee IDs
+// ===============================
+const parseEmployeeTerms = (text) => {
+  return text
+    .toLowerCase()
+    .split(/[\s,]+/)        // split by space OR comma
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0);
+};
+
+const applyLiveFilters = (rows) => {
+  return rows.filter((t) => {
+    // EMPLOYEE MULTI-FILTER
+    if (filterEmployeeIdEnabled) {
+      const terms = parseEmployeeTerms(filterEmployeeId);
+      if (terms.length > 0) {
+        const match = terms.some((term) =>
+          t.employeeId?.toLowerCase().includes(term)
+        );
+        if (!match) return false;
       }
+    }
 
-      // Task + Department filter
-      if (filterTaskEnabled) {
-        if (filterTaskDept && t.department !== filterTaskDept) return false;
-        if (filterTaskName && t.task !== filterTaskName) return false;
+    // Task + Department filter
+    if (filterTaskEnabled) {
+      if (filterTaskDept && t.department !== filterTaskDept) return false;
+      if (filterTaskName && t.task !== filterTaskName) return false;
+    }
+
+    // Date filter
+    if (filterDateEnabled && filterDate) {
+      const dateStr = t.startTime.slice(0, 10);
+      if (dateStr !== filterDate) return false;
+    }
+
+    // Duration (minutes)
+    if (filterDurationEnabled && filterDurationMin) {
+      const mins = getDurationSecsLive(t) / 60;
+      if (mins < Number(filterDurationMin)) return false;
+    }
+
+    return true;
+  });
+};
+
+const applyHistoryFilters = (rows) => {
+  return rows.filter((r) => {
+    // EMPLOYEE MULTI-FILTER
+    if (filterEmployeeIdEnabled) {
+      const terms = parseEmployeeTerms(filterEmployeeId);
+      if (terms.length > 0) {
+        const match = terms.some((term) =>
+          r.employeeId?.toLowerCase().includes(term)
+        );
+        if (!match) return false;
       }
+    }
 
-      // Date filter (exact date)
-      if (filterDateEnabled && filterDate) {
-        const dateStr =
-          typeof t.startTime === "string"
-            ? t.startTime.slice(0, 10)
-            : new Date(t.startTime).toISOString().slice(0, 10);
-        if (dateStr !== filterDate) return false;
-      }
+    // Task + Department
+    if (filterTaskEnabled) {
+      if (filterTaskDept && r.department !== filterTaskDept) return false;
+      if (filterTaskName && r.task !== filterTaskName) return false;
+    }
 
-      // Duration filter (minutes)
-      if (filterDurationEnabled && filterDurationMin) {
-        const secs = getDurationSecsLive(t);
-        const mins = secs / 60;
-        if (mins < Number(filterDurationMin)) return false;
-      }
+    // Date filter
+    if (filterDateEnabled && filterDate) {
+      if (r.date !== filterDate) return false;
+    }
 
-      return true;
-    });
-  };
+    // Duration
+    if (filterDurationEnabled && filterDurationMin) {
+      const mins = (Number(r.durationSecs) || 0) / 60;
+      if (mins < Number(filterDurationMin)) return false;
+    }
 
-  const applyHistoryFilters = (rows) => {
-    return rows.filter((r) => {
-      // Employee ID
-      if (filterEmployeeIdEnabled) {
-        const term = filterEmployeeId.trim().toLowerCase();
-        if (!term || !r.employeeId?.toLowerCase().includes(term)) return false;
-      }
+    return true;
+  });
+};
 
-      // Task + Department
-      if (filterTaskEnabled) {
-        if (filterTaskDept && r.department !== filterTaskDept) return false;
-        if (filterTaskName && r.task !== filterTaskName) return false;
-      }
-
-      // Date
-      if (filterDateEnabled && filterDate) {
-        if (r.date !== filterDate) return false;
-      }
-
-      // Duration (minutes)
-      if (filterDurationEnabled && filterDurationMin) {
-        const mins = (Number(r.durationSecs) || 0) / 60;
-        if (mins < Number(filterDurationMin)) return false;
-      }
-
-      return true;
-    });
-  };
 
   // ===============================
   // EXPORT CURRENT CSV
