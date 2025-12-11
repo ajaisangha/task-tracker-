@@ -747,7 +747,7 @@ const applyHistoryFilters = (rows) => {
       {showClearHistoryDialog && (
         <div className="dialog-overlay">
           <div className="dialog-box">
-            <h3>Clear Weekly History?</h3>
+            <h3>Clear History?</h3>
             <p>This will permanently delete all history records.</p>
 
             <div className="dialog-buttons">
@@ -847,7 +847,7 @@ const applyHistoryFilters = (rows) => {
                   setShowPreConfirmDialog(true);
                 }}
               >
-                Clear Weekly History
+                Clear History
               </button>
 
               <button className="exit-admin" onClick={exitAdminMode}>
