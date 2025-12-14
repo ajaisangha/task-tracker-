@@ -1,0 +1,79 @@
+/* OVERLAY */
+.admin-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+
+/* LOGIN DIALOG */
+.admin-dialog {
+  background: #fff;
+  padding: 20px;
+  width: 320px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.admin-dialog input {
+  padding: 8px;
+  font-size: 14px;
+}
+
+.admin-error {
+  color: #c00;
+  font-size: 13px;
+}
+
+.admin-dialog-buttons {
+  display: flex;
+  justify-content: space-between;
+}
+
+.admin-dialog-buttons .secondary {
+  background: #ddd;
+}
+
+/* ADMIN PAGE */
+.admin-page {
+  padding: 20px;
+}
+
+/* TOP BAR */
+.admin-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.admin-toggle button {
+  margin-right: 6px;
+}
+
+.admin-toggle .active {
+  background: #007bff;
+  color: #fff;
+}
+
+.logout-btn {
+  background: #c00;
+  color: white;
+}
+
+/* SECTIONS */
+.admin-section table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.admin-section th,
+.admin-section td {
+  border: 1px solid #ccc;
+  padding: 8px;
+}
